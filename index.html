@@ -4332,5 +4332,205 @@ setTimeout(maybe,FIRST);
 setInterval(maybe,60000);
 })();
 </script>
+<!-- ===== LOCATION ADD-ON: আপনার ফাইলের সবার শেষের </script> এর পরে, </body> এর ঠিক আগে পেস্ট করুন ===== -->
+<script>
+(function(){
+const $=id=>document.getElementById(id);
+const GOPALGANJ={lat:23.0050,lng:89.8266};
+const r6=n=>Math.round(n*1e6)/1e6;
+const valid=(a,b)=>isFinite(parseFloat(a))&&isFinite(parseFloat(b))&&Math.abs(a)<=90&&Math.abs(b)<=180&&a!==''&&b!==''&&a!==null&&b!==null;
+const me=()=>currentUser?currentUser.phone:'';
+const waitFor=(fn,ms)=>new Promise(res=>{const t0=Date.now();(function tick(){let v;try{v=fn();}catch(_){}if(v)return res(v);if(Date.now()-t0>ms)return res(null);setTimeout(tick,250);})();});
+
+let pick=null;   // বিজ্ঞাপন ফর্মে বাছাই করা লোকেশন {lat,lng}
+
+/* ================= ১. বিজ্ঞাপন ফর্মে লোকেশন ব্লক ================= */
+$('formAddress').parentElement.insertAdjacentHTML('afterend',
+'<div id="locBlock" class="border border-slate-200 rounded-xl bg-slate-50 p-2.5 space-y-2">'+
+ '<label class="block font-semibold text-slate-700 text-xs"><i class="fa-solid fa-location-crosshairs text-emerald-600 mr-1"></i> বাসার লোকেশন (Google Map)</label>'+
+ '<div class="grid grid-cols-1 sm:grid-cols-2 gap-2">'+
+  '<button type="button" id="locUseCur" class="py-2 px-3 bg-white hover:bg-emerald-50 border border-emerald-300 text-emerald-700 text-xs font-bold rounded-lg active:scale-95 transition"><i class="fa-solid fa-location-crosshairs mr-1"></i> বর্তমান লোকেশন ব্যবহার করুন</button>'+
+  '<button type="button" id="locPickMap" class="py-2 px-3 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg active:scale-95 transition"><i class="fa-solid fa-map-location-dot mr-1"></i> ম্যাপ থেকে লোকেশন বেছে নিন</button>'+
+ '</div>'+
+ '<div id="locStatus" class="hidden text-[11px] flex flex-wrap items-center gap-x-3 gap-y-1"></div>'+
+ '<p class="text-[10px] text-slate-400">ঐচ্ছিক। লোকেশন দিলে ভাড়াটিয়া কার্ড থেকেই Google Map-এ বাসা ও দিকনির্দেশ দেখতে পারবেন।</p>'+
+'</div>');
+
+function paint(){
+  const s=$('locStatus');
+  if(!pick){s.classList.add('hidden');s.innerHTML='';return;}
+  s.classList.remove('hidden');
+  s.innerHTML='<span class="font-bold text-emerald-700"><i class="fa-solid fa-circle-check mr-1"></i>লোকেশন সেট হয়েছে</span>'+
+    '<span class="font-mono text-slate-500">'+pick.lat.toFixed(5)+', '+pick.lng.toFixed(5)+'</span>'+
+    '<button type="button" id="locSee" class="text-sky-700 font-bold underline">ম্যাপে দেখুন</button>'+
+    '<button type="button" id="locClear" class="text-rose-600 font-bold underline">মুছুন</button>';
+  $('locSee').onclick=()=>openView(pick.lat,pick.lng);
+  $('locClear').onclick=()=>setPick(null);
+}
+function setPick(p){pick=p;paint();}
+
+/* ================= ২. বর্তমান লোকেশন ================= */
+function geoErr(err){
+  const m={1:'লোকেশনের অনুমতি দেওয়া হয়নি। ব্রাউজার সেটিংস থেকে অনুমতি দিন।',2:'আপনার লোকেশন পাওয়া যায়নি। GPS চালু আছে কিনা দেখুন।',3:'লোকেশন পেতে বেশি সময় লাগছে, আবার চেষ্টা করুন।'};
+  alert(m[err&&err.code]||'লোকেশন নেওয়া যায়নি।');
+}
+function getCurrent(done,btn){
+  if(!navigator.geolocation)return alert('আপনার ব্রাউজার লোকেশন সাপোর্ট করে না।');
+  const old=btn?btn.innerHTML:'';
+  if(btn){btn.disabled=true;btn.innerHTML='<i class="fa-solid fa-spinner fa-spin mr-1"></i> লোকেশন খোঁজা হচ্ছে...';}
+  const restore=()=>{if(btn){btn.disabled=false;btn.innerHTML=old;}};
+  navigator.geolocation.getCurrentPosition(
+    pos=>{restore();done({lat:r6(pos.coords.latitude),lng:r6(pos.coords.longitude)});},
+    err=>{restore();geoErr(err);},
+    {enableHighAccuracy:true,timeout:15000,maximumAge:0}
+  );
+}
+$('locUseCur').onclick=()=>getCurrent(p=>setPick(p),$('locUseCur'));
+
+/* ================= ৩. ম্যাপ থেকে বাছাই (Leaflet + OpenStreetMap) ================= */
+document.body.insertAdjacentHTML('beforeend',
+'<div id="locPicker" class="fixed inset-0 hidden flex-col bg-white" style="z-index:100">'+
+ '<div class="px-4 py-3 bg-gradient-to-r from-emerald-600 to-teal-700 text-white flex items-center justify-between" style="padding-top:calc(.75rem + env(safe-area-inset-top,0px))">'+
+  '<div><h3 class="text-sm sm:text-base font-bold"><i class="fa-solid fa-map-location-dot mr-1.5"></i> ম্যাপে বাসার লোকেশন বেছে নিন</h3><p class="text-[11px] text-emerald-100">ম্যাপে ট্যাপ করুন, অথবা মার্কার টেনে সঠিক জায়গায় বসান</p></div>'+
+  '<button type="button" id="locPickX" class="text-white hover:text-slate-200 text-3xl font-bold leading-none">&times;</button>'+
+ '</div>'+
+ '<div id="locMap" style="flex:1;min-height:0;width:100%"></div>'+
+ '<div class="p-3 bg-white border-t border-slate-200 space-y-2" style="padding-bottom:calc(.75rem + env(safe-area-inset-bottom,0px))">'+
+  '<div id="locPickInfo" class="text-[11px] text-slate-500 text-center">এখনো কোনো জায়গা বাছা হয়নি</div>'+
+  '<div class="flex gap-2">'+
+   '<button type="button" id="locPickCur" class="flex-1 py-2.5 bg-white hover:bg-emerald-50 border border-emerald-300 text-emerald-700 text-xs font-bold rounded-xl active:scale-95"><i class="fa-solid fa-location-crosshairs mr-1"></i> আমার লোকেশন</button>'+
+   '<button type="button" id="locPickOk" class="flex-[1.4] py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl active:scale-95"><i class="fa-solid fa-check mr-1"></i> এই লোকেশন নিশ্চিত করুন</button>'+
+  '</div>'+
+ '</div>'+
+'</div>');
+
+let map=null,marker=null,tmp=null;
+function loadLeaflet(){
+  if(window.L)return Promise.resolve();
+  return new Promise((res,rej)=>{
+    const css=document.createElement('link');css.rel='stylesheet';css.href='https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css';document.head.appendChild(css);
+    const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js';
+    s.onload=res;s.onerror=()=>rej(new Error('leaflet'));document.head.appendChild(s);
+  });
+}
+function setTmp(lat,lng,fly){
+  tmp={lat:r6(lat),lng:r6(lng)};
+  const icon=L.divIcon({className:'',html:'<i class="fa-solid fa-location-dot" style="font-size:38px;color:#e11d48;filter:drop-shadow(0 2px 3px rgba(0,0,0,.4))"></i>',iconSize:[30,40],iconAnchor:[15,38]});
+  if(!marker){
+    marker=L.marker([tmp.lat,tmp.lng],{icon,draggable:true}).addTo(map);
+    marker.on('dragend',()=>{const p=marker.getLatLng();tmp={lat:r6(p.lat),lng:r6(p.lng)};info();});
+  }else marker.setLatLng([tmp.lat,tmp.lng]);
+  if(fly)map.setView([tmp.lat,tmp.lng],17);
+  info();
+}
+function info(){
+  $('locPickInfo').innerHTML=tmp?'<b class="text-emerald-700">বাছা হয়েছে:</b> <span class="font-mono">'+tmp.lat.toFixed(5)+', '+tmp.lng.toFixed(5)+'</span>':'এখনো কোনো জায়গা বাছা হয়নি';
+}
+async function openPicker(){
+  try{await loadLeaflet();}catch(_){return alert('ম্যাপ লোড হয়নি। ইন্টারনেট চেক করে আবার চেষ্টা করুন।');}
+  const m=$('locPicker');m.classList.remove('hidden');m.classList.add('flex');
+  const start=pick||GOPALGANJ;
+  if(!map){
+    map=L.map('locMap').setView([start.lat,start.lng],pick?17:14);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap'}).addTo(map);
+    map.on('click',e=>setTmp(e.latlng.lat,e.latlng.lng));
+  }else map.setView([start.lat,start.lng],pick?17:14);
+  if(marker){map.removeLayer(marker);marker=null;}
+  tmp=null;
+  if(pick)setTmp(pick.lat,pick.lng);else info();
+  setTimeout(()=>map.invalidateSize(),80);
+}
+function closePicker(){const m=$('locPicker');m.classList.add('hidden');m.classList.remove('flex');}
+$('locPickMap').onclick=openPicker;
+$('locPickX').onclick=closePicker;
+$('locPickCur').onclick=()=>getCurrent(p=>{if(map)setTmp(p.lat,p.lng,true);},$('locPickCur'));
+$('locPickOk').onclick=()=>{
+  if(!tmp)return alert('আগে ম্যাপে ট্যাপ করে একটি জায়গা বেছে নিন।');
+  setPick({lat:tmp.lat,lng:tmp.lng});closePicker();
+};
+
+/* ================= ৪. কার্ড থেকে ম্যাপ দেখা (Google Map) ================= */
+document.body.insertAdjacentHTML('beforeend',
+'<div id="locView" class="fixed inset-0 bg-slate-900/70 backdrop-blur-sm hidden items-center justify-center p-3" style="z-index:100">'+
+ '<div class="bg-white rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl border border-slate-100 flex flex-col max-h-[92vh]">'+
+  '<div class="px-4 py-3 bg-emerald-700 text-white flex items-center justify-between"><h3 class="text-sm font-bold"><i class="fa-solid fa-map-pin mr-1.5"></i> বাসার লোকেশন</h3><button type="button" id="locViewX" class="text-white hover:text-slate-200 text-2xl font-bold leading-none">&times;</button></div>'+
+  '<iframe id="locFrame" class="w-full border-0" style="height:55vh;min-height:280px" loading="lazy" referrerpolicy="no-referrer-when-downgrade" allowfullscreen></iframe>'+
+  '<div class="p-3 flex flex-wrap gap-2 border-t border-slate-100">'+
+   '<a id="locOpen" target="_blank" rel="noopener noreferrer" class="flex-1 text-center py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl"><i class="fa-brands fa-google mr-1"></i> Google Maps-এ খুলুন</a>'+
+   '<a id="locDir" target="_blank" rel="noopener noreferrer" class="flex-1 text-center py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl"><i class="fa-solid fa-diamond-turn-right mr-1"></i> দিকনির্দেশ পান</a>'+
+  '</div>'+
+ '</div></div>');
+function openView(lat,lng){
+  lat=Number(lat);lng=Number(lng);
+  if(!valid(lat,lng))return;
+  $('locFrame').src='https://maps.google.com/maps?q='+lat+','+lng+'&z=17&output=embed';
+  $('locOpen').href='https://www.google.com/maps/search/?api=1&query='+lat+','+lng;
+  $('locDir').href='https://www.google.com/maps/dir/?api=1&destination='+lat+','+lng;
+  const m=$('locView');m.classList.remove('hidden');m.classList.add('flex');
+}
+function closeView(){const m=$('locView');m.classList.add('hidden');m.classList.remove('flex');$('locFrame').src='about:blank';}
+$('locViewX').onclick=closeView;
+$('locView').addEventListener('click',e=>{if(e.target.id==='locView')closeView();});
+document.addEventListener('keydown',e=>{
+  if(e.key!=='Escape')return;
+  if(!$('locView').classList.contains('hidden'))closeView();
+  if(!$('locPicker').classList.contains('hidden'))closePicker();
+});
+
+/* বাসার কার্ডে "ম্যাপে দেখুন" বাটন (লোকেশন থাকলে) */
+function tagCards(){
+  const c=$('listingsContainer');if(!c)return;
+  [...c.children].forEach(card=>{
+    if(card.querySelector('.loc-row'))return;
+    const b=card.querySelector('[onclick^="openReviewModal"]');if(!b)return;
+    const m=/openReviewModal\('([^']+)'\)/.exec(b.getAttribute('onclick')||'');if(!m)return;
+    const L=listings.find(l=>l.id==m[1]);
+    if(!L||!valid(L.lat,L.lng))return;
+    const lat=Number(L.lat),lng=Number(L.lng);
+    const row=document.createElement('div');
+    row.className='loc-row px-3.5 sm:px-5 pb-3 flex flex-wrap gap-2';
+    row.innerHTML='<button type="button" data-x="v" class="px-2.5 py-1.5 bg-sky-50 hover:bg-sky-100 border border-sky-200 text-sky-700 text-[11px] font-bold rounded-lg active:scale-95"><i class="fa-solid fa-map-location-dot mr-1"></i> ম্যাপে দেখুন</button>'+
+      '<a href="https://www.google.com/maps/dir/?api=1&destination='+lat+','+lng+'" target="_blank" rel="noopener noreferrer" class="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-700 text-[11px] font-bold rounded-lg active:scale-95"><i class="fa-solid fa-diamond-turn-right mr-1"></i> দিকনির্দেশ</a>';
+    row.querySelector('[data-x=v]').onclick=ev=>{ev.stopPropagation();openView(lat,lng);};
+    const content=card.firstElementChild||card,idr=content.querySelector('.adid-row');
+    if(idr)content.insertBefore(row,idr);else content.appendChild(row);
+  });
+}
+new MutationObserver(tagCards).observe($('listingsContainer'),{childList:true});
+tagCards();
+
+/* ================= ৫. সংরক্ষণ ও এডিট (শুধু মালিক বা অ্যাডমিন) ================= */
+async function patchLoc(id,loc){
+  if(isFirebaseReady){
+    await firebaseDb.collection('listings').doc(String(id)).update({lat:loc.lat,lng:loc.lng});
+  }else{
+    const l=listings.find(x=>x.id==id);
+    if(l){l.lat=loc.lat;l.lng=loc.lng;localStorage.setItem('gopalganj_tolet',JSON.stringify(listings));applyFilters();}
+  }
+}
+const _hf=handleFormSubmit;
+handleFormSubmit=async function(e){
+  const snap=pick?{lat:pick.lat,lng:pick.lng}:null,eid=$('editListingId').value,t0=Date.now();
+  const r=await _hf(e);
+  if(!snap||!$('adModal').classList.contains('hidden'))return r;   // সেভ না হলে কিছু করবে না
+  try{
+    let id=eid;
+    if(!id){const L=await waitFor(()=>listings.find(l=>(l.createdAt||0)>=t0&&l.ownerPhone===me()),8000);id=L&&L.id;}
+    if(id)await patchLoc(id,snap);
+  }catch(err){console.warn('Location save notice:',err);alert('বিজ্ঞাপন সেভ হয়েছে, কিন্তু লোকেশন সেভ করা যায়নি। এডিট করে আবার দিন।');}
+  return r;
+};
+
+const _el=editListing;
+editListing=function(id){
+  _el(id);
+  const it=listings.find(l=>l.id==id);
+  if(it&&canManage(it))setPick(valid(it.lat,it.lng)?{lat:Number(it.lat),lng:Number(it.lng)}:null);
+};
+const _oc=openAdModalForCreate;
+openAdModalForCreate=function(){_oc();setPick(null);};
+$('listingForm').addEventListener('reset',()=>setTimeout(()=>setPick(null),0));
+})();
+</script>
  </body>
 </html>
