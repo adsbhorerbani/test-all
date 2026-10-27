@@ -4332,5 +4332,145 @@ setTimeout(maybe,FIRST);
 setInterval(maybe,60000);
 })();
 </script>
+<!-- ===== SOCIAL LOGIN ADD-ON: Google (Firebase Auth) ===== -->
+<script>
+(function(){
+const $=id=>document.getElementById(id);
+if(!isFirebaseReady){return;}
+
+/* Firebase Auth library load (page load-e-i, jate popup block na hoy) */
+let authReady=new Promise((res,rej)=>{
+  if(firebase.auth)return res();
+  const s=document.createElement('script');
+  s.src='https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js';
+  s.onload=res;s.onerror=()=>rej(new Error('Auth লাইব্রেরি লোড হয়নি'));
+  document.head.appendChild(s);
+});
+const getAuth=async()=>{await authReady;return firebase.auth();};
+
+/* ---------- বাটন UI ---------- */
+const btns=(label)=>`
+<div class="social-login-box pt-1">
+  <div class="flex items-center gap-2 my-2"><span class="flex-1 h-px bg-slate-200"></span><span class="text-[11px] text-slate-400 font-semibold">অথবা</span><span class="flex-1 h-px bg-slate-200"></span></div>
+  <div class="grid grid-cols-1 gap-2">
+    <button type="button" data-p="google" class="flex items-center justify-center gap-2 py-2.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold active:scale-95 transition"><i class="fa-brands fa-google text-rose-500"></i> Google ${label}</button>
+  </div>
+</div>`;
+$('loginForm').querySelector('button[type=submit]').insertAdjacentHTML('afterend',btns('লগইন'));
+$('registerForm').querySelector('button[type=submit]').insertAdjacentHTML('afterend',btns('সাইন-আপ'));
+document.querySelectorAll('.social-login-box [data-p]').forEach(b=>b.onclick=()=>socialLogin(b.dataset.p));
+
+/* ---------- ফোন নম্বর নেওয়ার মডাল (নতুন সোশ্যাল ইউজারের জন্য) ---------- */
+document.body.insertAdjacentHTML('beforeend',`
+<div id="socialProfileModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm hidden items-center justify-center p-3" style="z-index:100">
+  <div class="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl border border-slate-100">
+    <div class="px-5 py-3.5 bg-emerald-600 text-white flex justify-between items-center">
+      <h3 class="text-sm font-bold"><i class="fa-solid fa-user-check mr-1.5"></i> প্রোফাইল সম্পূর্ণ করুন</h3>
+      <button type="button" id="spCancelX" class="text-white text-2xl font-bold leading-none">&times;</button>
+    </div>
+    <div class="p-4 sm:p-5 space-y-3 text-sm">
+      <p class="text-[11px] text-slate-500 leading-relaxed">বিজ্ঞাপন, কল ও চ্যাটের জন্য আপনার মোবাইল নম্বর লাগবে। এটি একবারই দিতে হবে।</p>
+      <div><label class="block font-medium text-slate-700 mb-1 text-xs">নাম *</label><input id="spName" maxlength="40" class="w-full p-2 text-xs rounded-lg border border-slate-200 focus:ring-2 focus:ring-emerald-500 outline-none"></div>
+      <div><label class="block font-medium text-slate-700 mb-1 text-xs">মোবাইল নম্বর *</label><input id="spPhone" type="tel" placeholder="017XXXXXXXX" class="w-full p-2 text-xs rounded-lg border border-slate-200 focus:ring-2 focus:ring-emerald-500 outline-none"></div>
+      <div><label class="block font-medium text-slate-700 mb-1 text-xs">ইমেইল <span id="spEmailHint" class="text-slate-400"></span></label><input id="spEmail" type="email" placeholder="example@gmail.com" class="w-full p-2 text-xs rounded-lg border border-slate-200 focus:ring-2 focus:ring-emerald-500 outline-none"></div>
+      <div class="flex gap-2 pt-1">
+        <button type="button" id="spCancel" class="flex-1 py-2.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-xs font-bold">বাতিল</button>
+        <button type="button" id="spSave" class="flex-[2] py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold active:scale-95">অ্যাকাউন্ট তৈরি করুন</button>
+      </div>
+    </div>
+  </div>
+</div>`);
+const spShow=s=>{const m=$('socialProfileModal');m.classList.toggle('hidden',!s);m.classList.toggle('flex',s);};
+let pending=null;
+$('spCancel').onclick=$('spCancelX').onclick=()=>{pending=null;spShow(false);};
+
+/* ---------- হেল্পার ---------- */
+const waitFor=(fn,ms)=>new Promise(res=>{const t0=Date.now();(function tick(){let v;try{v=fn();}catch(_){}if(v)return res(v);if(Date.now()-t0>ms)return res(null);setTimeout(tick,250);})();});
+const randPass=()=>{const a=new Uint32Array(3);crypto.getRandomValues(a);return Array.from(a).map(x=>x.toString(36)).join('').slice(0,12);};
+const errText=e=>{
+  const c=(e&&e.code)||'';
+  if(c==='auth/popup-closed-by-user'||c==='auth/cancelled-popup-request')return '';
+  if(c==='auth/operation-not-allowed')return 'এই লগইন পদ্ধতি Firebase Console-এ চালু করা নেই।';
+  if(c==='auth/unauthorized-domain')return 'এই ডোমেইন Firebase > Authentication > Settings > Authorized domains-এ যোগ করুন।';
+  if(c==='auth/account-exists-with-different-credential')return 'এই ইমেইল দিয়ে অন্য পদ্ধতিতে অ্যাকাউন্ট আছে। সেই পদ্ধতিতে লগইন করুন।';
+  if(c==='auth/network-request-failed')return 'ইন্টারনেট সংযোগ সমস্যা, আবার চেষ্টা করুন।';
+  return 'লগইন ব্যর্থ হয়েছে। '+(e&&e.message?'('+e.message+')':'');
+};
+
+/* ---------- মূল লগইন (শুধু Google) ---------- */
+async function socialLogin(name){
+  let auth;
+  try{auth=await getAuth();}catch(e){return alert(e.message);}
+  const prov=new firebase.auth.GoogleAuthProvider();
+  prov.setCustomParameters({prompt:'select_account'});
+  try{
+    const r=await auth.signInWithPopup(prov);
+    await afterSocial(r.user,'google');
+  }catch(e){
+    const c=(e&&e.code)||'';
+    if(c==='auth/popup-blocked'||c==='auth/operation-not-supported-in-this-environment'){
+      try{await auth.signInWithRedirect(prov);}catch(e2){const m=errText(e2);if(m)alert(m);}
+      return;
+    }
+    const m=errText(e);if(m)alert(m);
+  }
+}
+
+async function afterSocial(fu,provName){
+  const auth=await getAuth();
+  try{
+    if(!(await waitFor(()=>users.length>0,6000)))return alert('ব্যবহারকারীর তালিকা লোড হয়নি। ইন্টারনেট চেক করে আবার চেষ্টা করুন।');
+    const email=(fu.email||'').toLowerCase();
+    let u=users.find(x=>x.socialUid===fu.uid);
+    if(!u&&email&&fu.emailVerified)u=users.find(x=>x.email&&x.email.toLowerCase()===email);
+    if(u){
+      if(u.role==='admin'){alert('অ্যাডমিন অ্যাকাউন্টে সোশ্যাল লগইন চলবে না।');return;}
+      if(!u.socialUid){
+        u=Object.assign({},u,{socialUid:fu.uid,provider:provName});
+        try{await firebaseDb.collection('users').doc('user_'+u.phone).set(u);}catch(_){}
+      }
+      currentUser=u;localStorage.setItem('tolet_current_user',JSON.stringify(u));
+      toggleAuthModal(false);updateAuthUI();alert('স্বাগতম, '+u.name+'!');
+      return;
+    }
+    /* নতুন ইউজার -> ফোন নম্বর নিন */
+    pending={uid:fu.uid,provider:provName};
+    $('spName').value=cleanName(fu.displayName||'');
+    $('spEmail').value=fu.email||'';
+    $('spEmail').readOnly=!!(fu.email&&fu.emailVerified);
+    $('spEmailHint').textContent=fu.email?'':'(ঐচ্ছিক, পাসওয়ার্ড রিসেটের জন্য কাজে লাগবে)';
+    $('spPhone').value='';
+    toggleAuthModal(false);spShow(true);
+  }finally{
+    auth.signOut().catch(()=>{}); // আমাদের নিজস্ব সেশন ব্যবহার হচ্ছে
+  }
+}
+
+$('spSave').onclick=async()=>{
+  if(!pending)return;
+  const name=cleanName($('spName').value),phone=normPhone($('spPhone').value),email=$('spEmail').value.trim().toLowerCase();
+  if(!name)return alert('সঠিক নাম লিখুন!');
+  if(!validPhone(phone))return alert('সঠিক ১১ ডিজিটের মোবাইল নম্বর দিন (017XXXXXXXX)');
+  if(email&&!/^\S+@\S+\.\S+$/.test(email))return alert('সঠিক ইমেইল দিন!');
+  if(users.some(x=>x.phone===phone))return alert('এই মোবাইল নম্বরে আগেই অ্যাকাউন্ট আছে। পাসওয়ার্ড দিয়ে লগইন করুন (ভুলে গেলে "পাসওয়ার্ড ভুলে গেছেন?" ব্যবহার করুন)।');
+  if(email&&users.some(x=>x.email&&x.email.toLowerCase()===email))return alert('এই ইমেইল দিয়ে আগেই অ্যাকাউন্ট আছে। পাসওয়ার্ড দিয়ে লগইন করুন।');
+  const nu={name,email,phone,password:randPass(),role:'user',socialUid:pending.uid,provider:pending.provider};
+  const b=$('spSave');b.disabled=true;b.textContent='তৈরি হচ্ছে...';
+  try{
+    const d=await firebaseDb.collection('users').doc('user_'+phone).get();
+    if(d.exists)return alert('এই মোবাইল নম্বর আগেই ব্যবহৃত!');
+    await firebaseDb.collection('users').doc('user_'+phone).set(nu);
+    currentUser=nu;localStorage.setItem('tolet_current_user',JSON.stringify(nu));
+    pending=null;spShow(false);updateAuthUI();alert('অ্যাকাউন্ট তৈরি সম্পন্ন হয়েছে!');
+  }catch(e){console.error(e);alert(fbErrMsg(e,'অ্যাকাউন্ট তৈরি ব্যর্থ হয়েছে।'));}
+  finally{b.disabled=false;b.textContent='অ্যাকাউন্ট তৈরি করুন';}
+};
+
+/* redirect দিয়ে লগইন হলে ফিরে এসে শেষ করুন (মোবাইল/অ্যাপ মোড) */
+getAuth().then(a=>a.getRedirectResult()).then(r=>{
+  if(r&&r.user)afterSocial(r.user,'google');
+}).catch(e=>{const m=errText(e);if(m)alert(m);});
+})();
+</script>
  </body>
 </html>
