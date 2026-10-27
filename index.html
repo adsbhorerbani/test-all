@@ -4245,23 +4245,40 @@ window.addEventListener('appinstalled',()=>{
 const installed=()=>localStorage.getItem(K_INST)==='1';
 
 document.body.insertAdjacentHTML('beforeend',
-'<div id="appPop" class="fixed inset-0 bg-slate-900/70 backdrop-blur-sm hidden items-center justify-center p-3" style="z-index:95">'+
- '<div class="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl border border-slate-100 relative">'+
-  '<button type="button" id="appPopX" class="absolute top-2.5 right-2.5 w-7 h-7 rounded-full bg-black/10 hover:bg-black/20 text-slate-700 text-lg leading-none flex items-center justify-center">&times;</button>'+
-  '<div class="bg-gradient-to-br from-emerald-700 to-teal-800 text-white text-center px-5 pt-7 pb-5">'+
-   '<div class="w-16 h-16 mx-auto bg-white rounded-2xl flex items-center justify-center shadow-lg mb-3"><i class="fa-solid fa-house-chimney text-3xl text-emerald-600"></i></div>'+
-   '<h3 class="text-lg font-extrabold">To Let Gopalgonj</h3>'+
-   '<p class="text-xs text-emerald-100 mt-1">অ্যাপ ইনস্টল করে আরও সহজে বাসা খুঁজুন</p>'+
+'<style>'+
+ '@keyframes apPop{from{opacity:0;transform:translateY(28px) scale(.92)}to{opacity:1;transform:none}}'+
+ '@keyframes apFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}'+
+ '@keyframes apShine{0%{transform:translateX(-120%) skewX(-20deg)}60%,100%{transform:translateX(220%) skewX(-20deg)}}'+
+ '@keyframes apPulse{0%,100%{box-shadow:0 0 0 0 rgba(16,185,129,.55)}70%{box-shadow:0 0 0 12px rgba(16,185,129,0)}}'+
+ '#appPop.flex .ap-card{animation:apPop .45s cubic-bezier(.2,.9,.3,1.2) both}'+
+ '.ap-logo{animation:apFloat 3s ease-in-out infinite}'+
+ '.ap-btn{position:relative;overflow:hidden;animation:apPulse 2s infinite}'+
+ '.ap-btn::after{content:"";position:absolute;top:0;left:0;width:40%;height:100%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.45),transparent);animation:apShine 2.8s infinite}'+
+'</style>'+
+'<div id="appPop" class="fixed inset-0 bg-slate-950/70 backdrop-blur-md hidden items-center justify-center p-4" style="z-index:95">'+
+ '<div class="ap-card bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl shadow-emerald-900/40 relative">'+
+  '<button type="button" id="appPopX" aria-label="বন্ধ করুন" class="absolute top-3 right-3 z-20 w-8 h-8 rounded-full bg-white/20 hover:bg-white/35 backdrop-blur text-white text-xl leading-none flex items-center justify-center transition active:scale-90">&times;</button>'+
+  '<div class="relative overflow-hidden text-center text-white px-6 pt-9 pb-7 bg-gradient-to-br from-emerald-500 via-emerald-700 to-teal-900">'+
+   '<div class="absolute -top-12 -left-12 w-40 h-40 rounded-full bg-white/10 blur-2xl"></div>'+
+   '<div class="absolute -bottom-16 -right-10 w-44 h-44 rounded-full bg-teal-300/20 blur-2xl"></div>'+
+   '<span class="relative inline-flex items-center gap-1.5 bg-white/15 border border-white/25 backdrop-blur text-[10px] font-bold tracking-wider px-3 py-1 rounded-full mb-4"><i class="fa-solid fa-sparkles text-amber-300"></i> সম্পূর্ণ ফ্রি অ্যাপ</span>'+
+   '<div class="relative">'+
+    '<div class="ap-logo w-20 h-20 mx-auto rounded-3xl bg-white flex items-center justify-center shadow-xl shadow-black/25 ring-4 ring-white/30"><i class="fa-solid fa-house-chimney text-4xl text-emerald-600"></i></div>'+
+   '</div>'+
+   '<h3 class="relative mt-4 text-xl font-extrabold tracking-tight">To Let Gopalgonj</h3>'+
+   '<p class="relative text-xs text-emerald-100 mt-1.5 leading-relaxed">অ্যাপ ইনস্টল করে আরও সহজে<br>গোপালগঞ্জে বাসা খুঁজুন</p>'+
   '</div>'+
-  '<div class="p-4 space-y-3">'+
-   '<ul class="text-xs text-slate-600 space-y-1.5">'+
-    '<li><i class="fa-solid fa-circle-check text-emerald-600 mr-1.5"></i>হোম স্ক্রিন থেকে এক ট্যাপে ওপেন</li>'+
-    '<li><i class="fa-solid fa-circle-check text-emerald-600 mr-1.5"></i>ফুল স্ক্রিন, দ্রুত ও অ্যাপের মতো অভিজ্ঞতা</li>'+
-    '<li><i class="fa-solid fa-circle-check text-emerald-600 mr-1.5"></i>ওয়েবসাইটের সব বাসা, চ্যাট ও সুবিধা একই</li>'+
-   '</ul>'+
-   '<div id="appPopHelp" class="hidden text-[11px] bg-amber-50 border border-amber-200 text-amber-800 p-2.5 rounded-lg leading-relaxed"></div>'+
-   '<button type="button" id="appPopInstall" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-bold active:scale-95 flex items-center justify-center gap-2"><i class="fa-solid fa-download"></i> অ্যাপ ডাউনলোড করুন</button>'+
-   '<button type="button" id="appPopLater" class="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-bold">পরে করব</button>'+
+  '<div class="p-5 space-y-4 bg-gradient-to-b from-white to-slate-50">'+
+   '<div class="grid grid-cols-3 gap-2 text-center">'+
+    '<div class="rounded-2xl bg-emerald-50 border border-emerald-100 py-3 px-1"><div class="w-9 h-9 mx-auto rounded-xl bg-emerald-600 text-white flex items-center justify-center text-sm mb-1.5 shadow-sm shadow-emerald-300"><i class="fa-solid fa-bolt"></i></div><p class="text-[11px] font-bold text-slate-700 leading-tight">এক ট্যাপে<br>ওপেন</p></div>'+
+    '<div class="rounded-2xl bg-sky-50 border border-sky-100 py-3 px-1"><div class="w-9 h-9 mx-auto rounded-xl bg-sky-600 text-white flex items-center justify-center text-sm mb-1.5 shadow-sm shadow-sky-300"><i class="fa-solid fa-expand"></i></div><p class="text-[11px] font-bold text-slate-700 leading-tight">ফুল স্ক্রিন<br>ও দ্রুত</p></div>'+
+    '<div class="rounded-2xl bg-amber-50 border border-amber-100 py-3 px-1"><div class="w-9 h-9 mx-auto rounded-xl bg-amber-500 text-white flex items-center justify-center text-sm mb-1.5 shadow-sm shadow-amber-300"><i class="fa-solid fa-comments"></i></div><p class="text-[11px] font-bold text-slate-700 leading-tight">বাসা ও চ্যাট<br>একই সুবিধা</p></div>'+
+   '</div>'+
+   '<div id="appPopHelp" class="hidden text-[11px] bg-amber-50 border border-amber-200 text-amber-800 p-3 rounded-xl leading-relaxed"></div>'+
+   '<div class="space-y-2">'+
+    '<button type="button" id="appPopInstall" class="ap-btn w-full py-3.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white rounded-2xl text-sm font-extrabold active:scale-95 transition flex items-center justify-center gap-2.5 shadow-lg shadow-emerald-500/40"><i class="fa-solid fa-download"></i> অ্যাপ ডাউনলোড করুন</button>'+
+    '<button type="button" id="appPopLater" class="w-full py-2 text-slate-400 hover:text-slate-600 text-xs font-semibold transition">পরে করব</button>'+
+   '</div>'+
   '</div>'+
  '</div></div>');
 
